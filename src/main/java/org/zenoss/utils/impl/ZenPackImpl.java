@@ -6,11 +6,11 @@ import com.google.common.io.Files;
 import org.zenoss.utils.ZenPack;
 
 import java.io.File;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,7 +41,7 @@ public class ZenPackImpl implements ZenPack {
     /**
      * Return the path to the ZenPack root directory.
      *
-     * @return
+     * @return An absolute path.
      */
     public String getPath() {
         return _rootPath;
@@ -94,8 +94,20 @@ public class ZenPackImpl implements ZenPack {
 
     @Override
     public List<String> getQueueConfigPaths() {
-        // TODO: Get the paths
-        return Collections.emptyList();
+        List<String> paths = new ArrayList<String>();
+        File protocolRoot = new File(packPath("protocols"));
+        if (protocolRoot.isDirectory()) {
+            File[] filesarray = protocolRoot.listFiles(new FilenameFilter() {
+                @Override
+                public boolean accept(File file, String s) {
+                    return s.endsWith(".qjs");
+                }
+            });
+            for (File f : filesarray) {
+                paths.add(f.getAbsolutePath());
+            }
+        }
+        return paths;
     }
 
 }
