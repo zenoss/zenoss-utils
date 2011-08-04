@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2011, Zenoss Inc.  All Rights Reserved.
+ */
 package org.zenoss.utils;
 
 /**

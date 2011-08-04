@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2011, Zenoss Inc.  All Rights Reserved.
+ */
 package org.zenoss.utils.impl;
 
 import com.google.common.base.Joiner;
@@ -6,6 +9,7 @@ import com.google.common.io.Files;
 import org.zenoss.utils.ZenPack;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -97,10 +101,10 @@ public class ZenPackImpl implements ZenPack {
         List<String> paths = new ArrayList<String>();
         File protocolRoot = new File(packPath("protocols"));
         if (protocolRoot.isDirectory()) {
-            File[] filesarray = protocolRoot.listFiles(new FilenameFilter() {
+            File[] filesarray = protocolRoot.listFiles(new FileFilter() {
                 @Override
-                public boolean accept(File file, String s) {
-                    return s.endsWith(".qjs");
+                public boolean accept(File file) {
+                    return file.isFile() && file.getName().endsWith(".qjs");
                 }
             });
             for (File f : filesarray) {
