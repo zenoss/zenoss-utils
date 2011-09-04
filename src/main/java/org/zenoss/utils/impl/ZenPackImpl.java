@@ -6,31 +6,39 @@ package org.zenoss.utils.impl;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.io.Files;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.zenoss.utils.ZenPack;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileFilter;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ZenPackImpl implements ZenPack {
 
+    private static final Logger logger = LoggerFactory.getLogger(ZenPackImpl.class);
+
     private String _name;
     private String _rootPath;
     private String _version;
 
-    private static final Pattern NAME_REGEXP = Pattern.compile("^NAME\\s*=\\s*[\"\'](.*)[\"\']");
-    private static final Pattern VERSION_REGEXP = Pattern.compile("^VERSION\\s*=\\s*[\"\'](.*)[\"\']");
-
     public ZenPackImpl(String path) {
-        _rootPath = path.replaceAll("/$", "");
-        parseSetupPy();
+        _rootPath = path;
+        findZenPackInfo();
     }
 
     /**
@@ -69,31 +77,66 @@ public class ZenPackImpl implements ZenPack {
         return Joiner.on(File.separator).join(parts);
     }
 
-    /**
-     * Parse the ZenPack's setup.py to find the name and version.
-     */
-    private void parseSetupPy() {
-        String setuppy = new StringBuilder()
-                .append(_rootPath)
-                .append(File.separator)
-                .append("setup.py").toString();
-        try {
-            List<String> lines = Files.readLines(new File(setuppy), Charset.defaultCharset());
-            Matcher matcher;
-            for (String line : lines) {
-                if (_name == null && (matcher = NAME_REGEXP.matcher(line)).matches()) {
-                    _name = matcher.group(1);
-                } else if (_version == null && (matcher = VERSION_REGEXP.matcher(line)).matches()) {
-                    _version = matcher.group(1);
+    private void findZenPackInfo() {
+        // First try the EGG-INFO/PKG-INFO file for ZenPacks installed from an .egg
+        Map<String,String> eggInfo = parseEggInfo(new File(_rootPath, "EGG-INFO/PKG-INFO"));
+        if (eggInfo.isEmpty()) {
+            File[] eggInfoDirs = new File(_rootPath).listFiles(new FileFilter() {
+                @Override
+                public boolean accept(File file) {
+                    return file.isDirectory() && file.getName().toLowerCase().endsWith(".egg-info");
                 }
-                if (_name != null && _version != null) {
-                    break;
+            });
+            if (eggInfoDirs != null) {
+                for (File eggInfoDir : eggInfoDirs) {
+                    eggInfo = parseEggInfo(new File(eggInfoDir, "PKG-INFO"));
+                    if (!eggInfo.isEmpty()) {
+                        break;
+                    }
+                }
+            }
+        }
+        logger.debug("Found egg-info for ZenPack {}: {}", this._rootPath, eggInfo);
+        this._name = eggInfo.get("name");
+        if (this._name == null) {
+            logger.warn("Failed to find ZenPack name in: {}", this._rootPath);
+        }
+        this._version = eggInfo.get("version");
+        if (this._version == null) {
+            logger.warn("Failed to find ZenPack version in: {}", this._rootPath);
+        }
+    }
+
+    private Map<String,String> parseEggInfo(File file) {
+        if (!file.isFile()) {
+            return Collections.emptyMap();
+        }
+
+        Map<String,String> values = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
+        BufferedReader br = null;
+        try {
+            br = new BufferedReader(new FileReader(file));
+            String line = null;
+            while ((line = br.readLine()) != null) {
+                int colonIdx = line.indexOf(':');
+                if (colonIdx > 0) {
+                    String name = line.substring(0, colonIdx).trim();
+                    String value = line.substring(colonIdx + 1).trim();
+                    values.put(name, value);
                 }
             }
         } catch (IOException e) {
-            // Not much we can do, we'll just set stuff to null
-            // TODO: Log
+            logger.warn("Failed to parse file: {}, exception: {}", file.getAbsolutePath(), e.getLocalizedMessage());
+        } finally {
+            if (br != null) {
+                try {
+                    br.close();
+                } catch (IOException e) {
+                    logger.debug("Failed closing file", e);
+                }
+            }
         }
+        return values;
     }
 
     @Override

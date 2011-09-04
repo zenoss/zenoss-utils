@@ -54,8 +54,9 @@ public final class ZenPacks {
                     if (!s.startsWith("/")) {
                         // Path relative to easy-install.pth; make it absolute
                         try {
-                            s = Zenoss.zenPath("ZenPacks", s);
+                            s = new File(Zenoss.zenPath("ZenPacks", s)).getCanonicalPath();
                         } catch (ZenossException ignored) {
+                        } catch (IOException ignored) {
                         }
                     }
                     return s;

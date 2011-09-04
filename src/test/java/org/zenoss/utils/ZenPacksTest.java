@@ -38,13 +38,17 @@ public class ZenPacksTest {
         ZenPack zp = ZenPacks.getZenPack(ZENPACK);
         assertEquals(ZENPACK, zp.getName());
         assertEquals("1.2.3", zp.getVersion());
+
+        zp = ZenPacks.getZenPack(ZENPACK + "2");
+        assertEquals(ZENPACK + "2", zp.getName());
+        assertEquals("3.2.1", zp.getVersion());
     }
 
     @Test
     public void testGetPackPath() throws Exception {
         ZenPack zp = ZenPacks.getZenPack(ZENPACK);
         String path = zp.packPath("a", "b");
-        assertEquals(fakeZenHome + "ZenPacks/./ZenPacks.zenoss.TestZenPack/ZenPacks/zenoss/TestZenPack/a/b", path);
+        assertEquals(fakeZenHome + "ZenPacks/ZenPacks.zenoss.TestZenPack/ZenPacks/zenoss/TestZenPack/a/b", path);
     }
 
     @Test
