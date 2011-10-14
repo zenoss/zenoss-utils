@@ -40,8 +40,8 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         } else if (partitionTimestamps.isEmpty()) {
             return; //nothing needed to change
         }
-        doAnonymousBlock(buildPartitionsDdl(currentPartitions,
-                partitionTimestamps));
+        buildPartitionsDdl(currentPartitions,
+                partitionTimestamps);
     }
 
     /**
@@ -99,38 +99,28 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
     private void repartition(List<Partition> partitionsToKeep,
             List<Timestamp> partitionTimestamps,
             List<Partition> partitionsToPrune) {
-        StringBuilder repartitionBody = new StringBuilder();
-        repartitionBody.append(buildPartitionsDdl(partitionsToKeep,
-                partitionTimestamps));
+        buildPartitionsDdl(partitionsToKeep,
+                partitionTimestamps);
         if (!partitionsToKeep.isEmpty()) {
             Partition oldest = partitionsToKeep.get(0);
             logger.debug("oldest partition rangeMinimum is "
                     + oldest.getRangeMinimum());
             if (oldest.getRangeMinimum() != null) {
-                repartitionBody.append(" ALTER TABLE ")
-                        .append(oldest.getPartitionName())
-                        .append(" DROP CONSTRAINT on_or_after_check;");
+                this.template.update(" ALTER TABLE "
+                        + oldest.getPartitionName()
+                        + " DROP CONSTRAINT on_or_after_check;");
             }
         }
         for (Partition toPrune : partitionsToPrune) {
-            repartitionBody.append(" DROP TABLE ")
-                    .append(toPrune.getPartitionName())
-                    .append(';');
+            this.template.update(" DROP TABLE "
+                    + toPrune.getPartitionName());
         }
-        doAnonymousBlock(repartitionBody.toString());
     }
 
-    private String buildPartitionsDdl(List<Partition> partitions,
+    private void buildPartitionsDdl(List<Partition> partitions,
             List<Timestamp> partitionTimestamps) {
-        String trigger = "";
         Timestamp rangeMinimum = null;
-        if (partitions.isEmpty()) {
-            trigger = String.format(
-                      " DROP TRIGGER IF EXISTS %1$s ON %2$s;"
-                    + " CREATE TRIGGER %1$s BEFORE INSERT ON %2$s"
-                    + "   FOR EACH ROW EXECUTE PROCEDURE %3$s();",
-                    nameTrigger(), this.tableName, nameTriggerFunction());
-        } else {
+        if (!partitions.isEmpty()) {
             rangeMinimum = partitions.get(partitions.size()-1)
                     .getRangeLessThan();
         }
@@ -138,7 +128,6 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         List<Partition> allPartitions = new ArrayList<Partition>(
                 partitions.size() + partitionTimestamps.size());
         allPartitions.addAll(partitions);
-        StringBuilder createBody = new StringBuilder();
         for (Timestamp rangeLessThan : partitionTimestamps) {
             final String partitionName = namePartition(rangeLessThan);
             allPartitions.add(new PostgreSqlPartition(this.tableName,
@@ -146,13 +135,18 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                     rangeMinimum));
             logger.info("adding partition " + partitionName + " to table "
                     + this.tableName);
-            createBody.append(buildPartition(partitionName,
+            this.template.update(buildPartition(partitionName,
                     rangeLessThan, rangeMinimum, formats));
             rangeMinimum = rangeLessThan;
         }
-        createBody.append(buildTriggerFunction(allPartitions));
-        createBody.append(trigger);
-        return createBody.toString();
+        this.template.update(buildTriggerFunction(allPartitions));
+        if (partitions.isEmpty()) {
+            this.template.update(String.format(
+                      " DROP TRIGGER IF EXISTS %1$s ON %2$s;"
+                    + " CREATE TRIGGER %1$s BEFORE INSERT ON %2$s"
+                    + "   FOR EACH ROW EXECUTE PROCEDURE %3$s();",
+                    nameTrigger(), this.tableName, nameTriggerFunction()));
+        }
     }
 
     private String buildPartition(String partitionName,
@@ -226,34 +220,21 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
 
     @Override
     public void removeAllPartitions() {
-        StringBuilder removeBody = new StringBuilder();
-        removeBody.append(String.format(
-                  " DROP TRIGGER %s ON %s;"
-                + " DROP FUNCTION %s();",
-                nameTrigger(), this.tableName, nameTriggerFunction()));
+        this.template.update(" DROP TRIGGER " + nameTrigger()
+                + " ON " + this.tableName);
+        this.template.update(" DROP FUNCTION " + nameTriggerFunction() + "()");
         List<Partition> partitions = listPartitions();
         for (Partition partition : partitions) {
-            removeBody.append(String.format(
-                    " ALTER TABLE %s NO INHERIT %s;",
-                    partition.getPartitionName(), this.tableName));
+            this.template.update("ALTER TABLE " + partition.getPartitionName()
+                    + " NO INHERIT " + this.tableName);
         }
         for (Partition partition : partitions) {
-            removeBody.append(String.format(
-                    " INSERT INTO %s SELECT * FROM %s;",
-                    this.tableName, partition.getPartitionName()));
+            this.template.update("INSERT INTO " + this.tableName
+                    + " SELECT * FROM " + partition.getPartitionName());
         }
         for (Partition partition : partitions) {
-            removeBody.append(" DROP TABLE ")
-                    .append(partition.getPartitionName())
-                    .append(';');
+            this.template.update("DROP TABLE " + partition.getPartitionName());
         }
-        doAnonymousBlock(removeBody.toString());
-    }
-
-    private void doAnonymousBlock(String code) {
-        String block = "DO $DO$BEGIN " + code + " END $DO$;";
-        logger.debug(block);
-        this.template.update(block);
     }
 
     protected List<String> getIndexFormats() {
