@@ -6,16 +6,16 @@ package org.zenoss.utils.dao.impl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
+import org.zenoss.utils.dao.Partition;
 
+import javax.sql.DataSource;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
-import javax.sql.DataSource;
-
-import org.zenoss.utils.dao.Partition;
 
 /**
  * PostgreSQL compatible implementation of RangePartitioner
@@ -24,6 +24,12 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
 
     private static final Logger logger = LoggerFactory
             .getLogger(PostgreSqlRangePartitioner.class);
+
+    private static final SimpleDateFormat PARTITION_TS_FMT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+    static {
+        PARTITION_TS_FMT.setTimeZone(TimeZone.getTimeZone("UTC"));
+    }
 
     public PostgreSqlRangePartitioner(DataSource ds, String databaseName,
             String tableName, String columnName, long duration, TimeUnit unit) {
@@ -160,13 +166,13 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
             partitionDdl.append("   CONSTRAINT on_or_after_check CHECK (")
                     .append(this.columnName)
                     .append(" >= '")
-                    .append(rangeMinimum)
+                    .append(PARTITION_TS_FMT.format(rangeMinimum))
                     .append("'::timestamp without time zone),");
         }
         partitionDdl.append("   CONSTRAINT before_check CHECK (")
                 .append(this.columnName)
                 .append(" < '")
-                .append(rangeLessThan)
+                .append(PARTITION_TS_FMT.format(rangeLessThan))
                 .append("'::timestamp without time zone) ) INHERITS (")
                 .append(this.tableName)
                 .append(");");
@@ -185,8 +191,8 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 + "           NEW.%1$s < '%3$s'::timestamp without time zone ) THEN"
                 + "     INSERT INTO %4$s VALUES (NEW.*);",
                 this.columnName,
-                partition.getRangeMinimum(),
-                partition.getRangeLessThan(),
+                PARTITION_TS_FMT.format(partition.getRangeMinimum()),
+                PARTITION_TS_FMT.format(partition.getRangeLessThan()),
                 partition.getPartitionName()));
         }
         Partition newestPartition = partitions.get(partitions.size()-1);
@@ -210,11 +216,11 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 + " LANGUAGE plpgsql;",
                 nameTriggerFunction(),
                 this.columnName,
-                newestPartition.getRangeMinimum(),
-                newestPartition.getRangeLessThan(),
+                PARTITION_TS_FMT.format(newestPartition.getRangeMinimum()),
+                PARTITION_TS_FMT.format(newestPartition.getRangeLessThan()),
                 newestPartition.getPartitionName(),
                 elsifs.toString(),
-                oldestPartition.getRangeLessThan(),
+                PARTITION_TS_FMT.format(oldestPartition.getRangeLessThan()),
                 oldestPartition.getPartitionName());
     }
 

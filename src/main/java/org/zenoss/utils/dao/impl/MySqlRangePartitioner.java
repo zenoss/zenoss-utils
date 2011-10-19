@@ -6,17 +6,15 @@ package org.zenoss.utils.dao.impl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
+import org.zenoss.utils.dao.Partition;
 
+import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
-import javax.sql.DataSource;
-
-import org.zenoss.utils.dao.Partition;
 
 /**
  * MySQL compatible implementation of RangePartitioner
