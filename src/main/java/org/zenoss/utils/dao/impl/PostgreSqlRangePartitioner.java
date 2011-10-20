@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
@@ -110,8 +111,8 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         List<Timestamp> partitionTimestamps = calculatePartitionTimestamps(
                 pastPartitions, futurePartitions, rangeMinimum);
         if (partitionsToPrune.isEmpty() && partitionTimestamps.isEmpty()) {
-            logger.info("There are no partitions to prune or create on table "
-                    + this.tableName);
+            logger.info("There are no partitions to prune or create on table {}",
+                    this.tableName);
             return 0;
         }
         repartition(partitionsToKeep, partitionTimestamps, partitionsToPrune);
@@ -125,8 +126,8 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 partitionTimestamps);
         if (!partitionsToKeep.isEmpty()) {
             Partition oldest = partitionsToKeep.get(0);
-            logger.debug("oldest partition rangeMinimum is "
-                    + oldest.getRangeMinimum());
+            logger.debug("oldest partition rangeMinimum is {}",
+                    oldest.getRangeMinimum());
             if (oldest.getRangeMinimum() != null) {
                 this.template.update(" ALTER TABLE "
                         + oldest.getPartitionName()
@@ -156,12 +157,13 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
             allPartitions.add(new PostgreSqlPartition(this.tableName,
                     this.columnName, partitionName, rangeLessThan,
                     rangeMinimum));
-            logger.info("adding partition " + partitionName + " to table "
-                    + this.tableName);
+            logger.info("adding partition {} to table {}", partitionName, this.tableName);
             createPartition(partitionName, rangeLessThan, rangeMinimum, formats, triggers);
             rangeMinimum = rangeLessThan;
         }
-        this.template.update(buildTriggerFunction(allPartitions));
+        String triggerFunction = buildTriggerFunction(allPartitions);
+        logger.debug("Trigger function: {}", triggerFunction);
+        this.template.update(triggerFunction);
         if (partitions.isEmpty()) {
             this.template.update(String.format(
                       " DROP TRIGGER IF EXISTS %1$s ON %2$s;"
@@ -178,13 +180,13 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                                  List<Trigger> triggers) {
         StringBuilder partitionDdl = new StringBuilder(" CREATE TABLE ");
         partitionDdl.append(partitionName)
-                .append(" (");
+                .append(" (\n");
         if (rangeMinimum != null) {
             partitionDdl.append("   CONSTRAINT on_or_after_check CHECK (")
                     .append(this.columnName)
                     .append(" >= '")
                     .append(PARTITION_TS_FMT.format(rangeMinimum))
-                    .append("'::timestamp without time zone),");
+                    .append("'::timestamp without time zone),\n");
         }
         partitionDdl.append("   CONSTRAINT before_check CHECK (")
                 .append(this.columnName)
@@ -192,12 +194,16 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 .append(PARTITION_TS_FMT.format(rangeLessThan))
                 .append("'::timestamp without time zone) ) INHERITS (")
                 .append(this.tableName)
-                .append(");");
-        this.template.update(partitionDdl.toString());
+                .append(")\n");
+        String createTable = partitionDdl.toString();
+        logger.debug("Creating table: {}", createTable);
+        this.template.update(createTable);
 
         // Create indexes from parent table
         for (String indexFormat : formats) {
-            this.template.update(String.format(indexFormat, partitionName, partitionName));
+            String createIndex = String.format(indexFormat, partitionName, partitionName);
+            logger.debug("Creating index: {}", createIndex);
+            this.template.update(createIndex);
         }
 
         // Create triggers from parent table
@@ -211,44 +217,39 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
     }
 
     private String buildTriggerFunction(List<Partition> partitions) {
-        StringBuilder elsifs = new StringBuilder();
-        for (Partition partition : partitions.subList(1, partitions.size()-1)) {
-            elsifs.insert(0, String.format(
-                  "   ELSIF ( NEW.%1$s >= '%2$s'::timestamp without time zone AND"
-                + "           NEW.%1$s < '%3$s'::timestamp without time zone ) THEN"
-                + "     INSERT INTO %4$s VALUES (NEW.*);",
-                this.columnName,
-                PARTITION_TS_FMT.format(partition.getRangeMinimum()),
-                PARTITION_TS_FMT.format(partition.getRangeLessThan()),
-                partition.getPartitionName()));
+        StringBuilder conditions = new StringBuilder();
+
+        // Reverse list of partitions - more likely to insert into a newer partition
+        for (ListIterator<Partition> it = partitions.listIterator(partitions.size()); it.hasPrevious(); ) {
+            Partition partition = it.previous();
+            String rangeLessThan = PARTITION_TS_FMT.format(partition.getRangeLessThan());
+            if (partition.getRangeMinimum() == null) {
+                conditions.append(String.format(
+                        "  WHEN (NEW.%1$s < '%2$s'::timestamp without time zone) THEN\n" +
+                        "    INSERT INTO %3$s VALUES (NEW.*);\n",
+                        this.columnName, rangeLessThan, partition.getPartitionName()));
+            }
+            else {
+                String rangeMinimum = PARTITION_TS_FMT.format(partition.getRangeMinimum());
+                conditions.append(String.format(
+                        "  WHEN (NEW.%1$s < '%2$s'::timestamp without time zone AND\n" +
+                        "        NEW.%1$s >= '%3$s'::timestamp without time zone) THEN\n" +
+                        "    INSERT INTO %4$s VALUES (NEW.*);\n",
+                        this.columnName, rangeLessThan, rangeMinimum, partition.getPartitionName()));
+            }
         }
-        Partition newestPartition = partitions.get(partitions.size()-1);
-        Partition oldestPartition = partitions.get(0);
-        return String.format(
-                  " CREATE OR REPLACE FUNCTION %1$s()"
-                + " RETURNS TRIGGER AS $$"
-                + " BEGIN"
-                + "   IF ( NEW.%2$s >= '%3$s'::timestamp without time zone AND"
-                + "        NEW.%2$s < '%4$s'::timestamp without time zone ) THEN"
-                + "     INSERT INTO %5$s VALUES (NEW.*);"
-                + " %6$s"
-                + "   ELSIF ( NEW.%2$s < '%7$s'::timestamp without time zone ) THEN"
-                + "     INSERT INTO %8$s VALUES (NEW.*);"
-                + "   ELSE"
-                + "     RAISE EXCEPTION 'Date out of range';"
-                + "   END IF;"
-                + "   RETURN NULL;"
-                + " END;"
-                + " $$"
-                + " LANGUAGE plpgsql;",
-                this.triggerFunction,
-                this.columnName,
-                PARTITION_TS_FMT.format(newestPartition.getRangeMinimum()),
-                PARTITION_TS_FMT.format(newestPartition.getRangeLessThan()),
-                newestPartition.getPartitionName(),
-                elsifs.toString(),
-                PARTITION_TS_FMT.format(oldestPartition.getRangeLessThan()),
-                oldestPartition.getPartitionName());
+        return "CREATE OR REPLACE FUNCTION " + this.triggerFunction + "()\n"
+             + "RETURNS TRIGGER AS $$\n"
+             + "BEGIN\n"
+             + "CASE\n"
+             + conditions.toString()
+             + "  ELSE\n"
+             + "    RAISE EXCEPTION 'Date out of range';\n"
+             + "END CASE;\n"
+             + "RETURN NULL;\n"
+             + "END;\n"
+             + "$$\n"
+             + "LANGUAGE plpgsql";
     }
 
     @Override
@@ -260,12 +261,8 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         for (Partition partition : partitions) {
             this.template.update("ALTER TABLE " + partition.getPartitionName()
                     + " NO INHERIT " + this.tableName);
-        }
-        for (Partition partition : partitions) {
             this.template.update("INSERT INTO " + this.tableName
                     + " SELECT * FROM " + partition.getPartitionName());
-        }
-        for (Partition partition : partitions) {
             this.template.update("DROP TABLE " + partition.getPartitionName());
         }
     }
