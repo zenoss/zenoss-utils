@@ -3,17 +3,27 @@
  */
 package org.zenoss.utils.dao.impl;
 
+import com.google.common.base.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.zenoss.utils.dao.Partition;
 
 import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -31,9 +41,15 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         PARTITION_TS_FMT.setTimeZone(TimeZone.getTimeZone("UTC"));
     }
 
+    private static final String PUBLIC_SCHEMA = "public";
+    private final String triggerName;
+    private final String triggerFunction;
+
     public PostgreSqlRangePartitioner(DataSource ds, String databaseName,
             String tableName, String columnName, long duration, TimeUnit unit) {
         super(ds, databaseName, tableName, columnName, duration, unit);
+        this.triggerName = "ins_" + this.tableName + "_trg";
+        this.triggerFunction = this.tableName + "_ins_trg_fn";
     }
 
     protected void createPartitions(List<Partition> currentPartitions,
@@ -130,6 +146,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
             rangeMinimum = partitions.get(partitions.size()-1)
                     .getRangeLessThan();
         }
+        List<Trigger> triggers = getTriggers();
         List<String> formats = getIndexFormats();
         List<Partition> allPartitions = new ArrayList<Partition>(
                 partitions.size() + partitionTimestamps.size());
@@ -141,8 +158,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                     rangeMinimum));
             logger.info("adding partition " + partitionName + " to table "
                     + this.tableName);
-            this.template.update(buildPartition(partitionName,
-                    rangeLessThan, rangeMinimum, formats));
+            createPartition(partitionName, rangeLessThan, rangeMinimum, formats, triggers);
             rangeMinimum = rangeLessThan;
         }
         this.template.update(buildTriggerFunction(allPartitions));
@@ -151,14 +167,15 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                       " DROP TRIGGER IF EXISTS %1$s ON %2$s;"
                     + " CREATE TRIGGER %1$s BEFORE INSERT ON %2$s"
                     + "   FOR EACH ROW EXECUTE PROCEDURE %3$s();",
-                    nameTrigger(), this.tableName, nameTriggerFunction()));
+                    this.triggerName, this.tableName, this.triggerFunction));
         }
     }
 
-    private String buildPartition(String partitionName,
-            Timestamp rangeLessThan,
-            Timestamp rangeMinimum,
-            List<String> formats) {
+    private void createPartition(String partitionName,
+                                 Timestamp rangeLessThan,
+                                 Timestamp rangeMinimum,
+                                 List<String> formats,
+                                 List<Trigger> triggers) {
         StringBuilder partitionDdl = new StringBuilder(" CREATE TABLE ");
         partitionDdl.append(partitionName)
                 .append(" (");
@@ -176,11 +193,21 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 .append("'::timestamp without time zone) ) INHERITS (")
                 .append(this.tableName)
                 .append(");");
+        this.template.update(partitionDdl.toString());
+
+        // Create indexes from parent table
         for (String indexFormat : formats) {
-            partitionDdl.append(String.format(indexFormat,
-                    partitionName, partitionName));
+            this.template.update(String.format(indexFormat, partitionName, partitionName));
         }
-        return partitionDdl.toString();
+
+        // Create triggers from parent table
+        for (Trigger trigger : triggers) {
+            Trigger partitionTrigger = new Trigger(trigger);
+            partitionTrigger.tableName = partitionName;
+            String triggerSql = partitionTrigger.toSql();
+            logger.debug("Creating trigger: {}", triggerSql);
+            this.template.update(triggerSql);
+        }
     }
 
     private String buildTriggerFunction(List<Partition> partitions) {
@@ -214,7 +241,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 + " END;"
                 + " $$"
                 + " LANGUAGE plpgsql;",
-                nameTriggerFunction(),
+                this.triggerFunction,
                 this.columnName,
                 PARTITION_TS_FMT.format(newestPartition.getRangeMinimum()),
                 PARTITION_TS_FMT.format(newestPartition.getRangeLessThan()),
@@ -226,9 +253,9 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
 
     @Override
     public void removeAllPartitions() {
-        this.template.update(" DROP TRIGGER " + nameTrigger()
+        this.template.update(" DROP TRIGGER " + this.triggerName
                 + " ON " + this.tableName);
-        this.template.update(" DROP FUNCTION " + nameTriggerFunction() + "()");
+        this.template.update(" DROP FUNCTION " + this.triggerFunction + "()");
         List<Partition> partitions = listPartitions();
         for (Partition partition : partitions) {
             this.template.update("ALTER TABLE " + partition.getPartitionName()
@@ -246,17 +273,107 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
     protected List<String> getIndexFormats() {
         // CREATE UNIQUE INDEX event_archive_pkey
         //   ON event_archive USING btree (uuid, last_seen)
-        final List<Map<String, Object>> fields = this.template.queryForList(
-                " SELECT indexdef FROM pg_indexes WHERE tablename = ? ",
+        final List<String> indexDefs = this.template.getJdbcOperations().queryForList(
+                "SELECT indexdef FROM pg_indexes WHERE tablename = ?", String.class,
                 this.tableName);
-        List<String> indexFormats = new ArrayList<String>(fields.size());
-        for (Map<String, Object> map : fields) {
-            String indexDef = (String) map.get("indexdef");
-            indexFormats.add(" "
-                    + indexDef.replaceAll(this.tableName, "%s")
-                    + "; ");
+        List<String> indexFormats = new ArrayList<String>(indexDefs.size());
+        for (String indexDef : indexDefs) {
+            // TODO: This may be too aggressive if column names contain portion of table name
+            indexFormats.add(indexDef.replaceAll(this.tableName, "%s"));
         }
         return indexFormats;
+    }
+
+    private static class Trigger {
+        String name;
+        String tableSchema;
+        String tableName;
+        String timing;
+        String orientation;
+        Set<String> events = new HashSet<String>();
+        Set<String> updateColumns = new HashSet<String>();
+        String condition;
+        String statement;
+
+        public Trigger() {
+        }
+        
+        public Trigger(Trigger trigger) {
+            this.name = trigger.name;
+            this.tableSchema = trigger.tableSchema;
+            this.tableName = trigger.tableName;
+            this.timing = trigger.timing;
+            this.orientation = trigger.orientation;
+            this.events = new HashSet<String>(trigger.events);
+            this.updateColumns = new HashSet<String>(trigger.updateColumns);
+            this.condition = trigger.condition;
+            this.statement = trigger.statement;
+        }
+
+        public String toSql() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE TRIGGER ").append(name).append(' ').append(timing);
+            for (Iterator<String> it = events.iterator(); it.hasNext(); ) {
+                String event = it.next();
+                sb.append(" ").append(event);
+                if (!updateColumns.isEmpty()) {
+                    sb.append(" OF ").append(StringUtils.collectionToCommaDelimitedString(updateColumns));
+                }
+                if (it.hasNext()) {
+                    sb.append(" OR");
+                }
+            }
+            sb.append(" ON ").append(tableSchema).append('.').append(tableName);
+            // TODO: FROM referenced_table_name
+            // TODO: { NOT DEFERRABLE | [ DEFERRABLE ] { INITIALLY IMMEDIATE | INITIALLY DEFERRED } }
+            sb.append(" FOR EACH ").append(orientation);
+            if (condition != null) {
+                sb.append(" WHEN ").append(condition);
+            }
+            sb.append(" ").append(statement);
+            return sb.toString();
+        }
+
+        @Override
+        public String toString() {
+            return toSql();
+        }
+    }
+
+    protected List<Trigger> getTriggers() {
+        // TODO: Support custom schemas here instead of assuming public schema
+        final String sql = "SELECT tg.*,uc.event_object_column FROM INFORMATION_SCHEMA.TRIGGERS tg" +
+                " LEFT JOIN INFORMATION_SCHEMA.TRIGGERED_UPDATE_COLUMNS uc" +
+                " USING(trigger_catalog,trigger_schema,trigger_name,event_object_catalog,event_object_schema,event_object_table)" +
+                " WHERE event_object_schema=? AND event_object_table=? AND trigger_name != ?";
+        return this.template.getJdbcOperations().query(sql, new ResultSetExtractor<List<Trigger>>() {
+            @Override
+            public List<Trigger> extractData(ResultSet rs) throws SQLException, DataAccessException {
+                Map<String,Trigger> triggersByName = new HashMap<String, Trigger>();
+                while (rs.next()) {
+                    String name = rs.getString("trigger_name");
+                    String event = rs.getString("event_manipulation");
+                    String updateColumn = Strings.emptyToNull(rs.getString("event_object_column"));
+                    Trigger existing = triggersByName.get(name);
+                    if (existing == null) {
+                        existing = new Trigger();
+                        existing.name = name;
+                        existing.tableSchema = rs.getString("event_object_schema");
+                        existing.tableName = rs.getString("event_object_table");
+                        existing.statement = rs.getString("action_statement");
+                        existing.condition = Strings.emptyToNull(rs.getString("action_condition"));
+                        existing.orientation = rs.getString("action_orientation");
+                        existing.timing = rs.getString("condition_timing");
+                        triggersByName.put(name, existing);
+                    }
+                    existing.events.add(event);
+                    if (updateColumn != null) {
+                        existing.updateColumns.add(updateColumn);
+                    }
+                }
+                return new ArrayList<Trigger>(triggersByName.values());
+            }
+        }, PUBLIC_SCHEMA, this.tableName, this.triggerName);
     }
 
     /**
@@ -298,13 +415,5 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
 
     private String namePartition(Timestamp partitionTimestamp) {
         return this.tableName + "_p" + DATE_FORMAT.format(partitionTimestamp);
-    }
-
-    private String nameTrigger() {
-        return "ins_" + this.tableName + "_trg";
-    }
-
-    private String nameTriggerFunction() {
-        return this.tableName + "_ins_trg_fn";
     }
 }
