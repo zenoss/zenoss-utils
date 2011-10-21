@@ -55,16 +55,11 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
 
     protected void createPartitions(List<Partition> currentPartitions,
             List<Timestamp> partitionTimestamps) {
-        if (currentPartitions.isEmpty()) {
-            if (partitionTimestamps.size() < 2) {
-                    throw new IllegalArgumentException(
-                            "Must create multiple partitions.");
-            }
-        } else if (partitionTimestamps.isEmpty()) {
-            return; //nothing needed to change
+        if (currentPartitions.isEmpty() && partitionTimestamps.size() < 2) {
+            throw new IllegalArgumentException(
+                    "Must create multiple partitions.");
         }
-        buildPartitionsDdl(currentPartitions,
-                partitionTimestamps);
+        buildPartitionsDdl(currentPartitions, partitionTimestamps);
     }
 
     /**
@@ -110,11 +105,6 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 .get(currentPartitions.size()-1).getRangeLessThan();
         List<Timestamp> partitionTimestamps = calculatePartitionTimestamps(
                 pastPartitions, futurePartitions, rangeMinimum);
-        if (partitionsToPrune.isEmpty() && partitionTimestamps.isEmpty()) {
-            logger.info("There are no partitions to prune or create on table {}",
-                    this.tableName);
-            return 0;
-        }
         repartition(partitionsToKeep, partitionTimestamps, partitionsToPrune);
         return partitionTimestamps.size();
     }
@@ -360,7 +350,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                         existing.statement = rs.getString("action_statement");
                         existing.condition = Strings.emptyToNull(rs.getString("action_condition"));
                         existing.orientation = rs.getString("action_orientation");
-                        existing.timing = rs.getString("condition_timing");
+                        existing.timing = rs.getString("action_timing");
                         triggersByName.put(name, existing);
                     }
                     existing.events.add(event);
