@@ -14,6 +14,7 @@ import org.zenoss.utils.dao.Partition;
 
 import javax.sql.DataSource;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
@@ -337,6 +338,15 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
             @Override
             public List<Trigger> extractData(ResultSet rs) throws SQLException, DataAccessException {
                 Map<String,Trigger> triggersByName = new HashMap<String, Trigger>();
+                ResultSetMetaData rsmd = rs.getMetaData();
+                String timingColumnName = null;
+                for (int i = 1; i <= rsmd.getColumnCount(); i++) {
+                    String columnName = rsmd.getColumnName(i);
+                    if ("action_timing".equals(columnName) || "condition_timing".equals(columnName)) {
+                        timingColumnName = columnName;
+                        break;
+                    }
+                }
                 while (rs.next()) {
                     String name = rs.getString("trigger_name");
                     String event = rs.getString("event_manipulation");
@@ -350,7 +360,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                         existing.statement = rs.getString("action_statement");
                         existing.condition = Strings.emptyToNull(rs.getString("action_condition"));
                         existing.orientation = rs.getString("action_orientation");
-                        existing.timing = rs.getString("action_timing");
+                        existing.timing = rs.getString(timingColumnName);
                         triggersByName.put(name, existing);
                     }
                     existing.events.add(event);
