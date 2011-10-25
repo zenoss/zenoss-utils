@@ -3,8 +3,6 @@
  */
 package org.zenoss.utils.dao;
 
-import org.zenoss.utils.dao.Partition;
-
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 

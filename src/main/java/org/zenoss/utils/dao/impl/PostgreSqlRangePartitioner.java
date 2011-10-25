@@ -37,7 +37,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
     private static final Logger logger = LoggerFactory
             .getLogger(PostgreSqlRangePartitioner.class);
 
-    private static final SimpleDateFormat PARTITION_TS_FMT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final SimpleDateFormat PARTITION_TS_FMT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
 
     static {
         PARTITION_TS_FMT.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -177,13 +177,13 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                     .append(this.columnName)
                     .append(" >= '")
                     .append(PARTITION_TS_FMT.format(rangeMinimum))
-                    .append("'::timestamp without time zone),\n");
+                    .append("'),\n");
         }
         partitionDdl.append("   CONSTRAINT before_check CHECK (")
                 .append(this.columnName)
                 .append(" < '")
                 .append(PARTITION_TS_FMT.format(rangeLessThan))
-                .append("'::timestamp without time zone) ) INHERITS (")
+                .append("') ) INHERITS (")
                 .append(this.tableName)
                 .append(")\n");
         String createTable = partitionDdl.toString();
@@ -216,15 +216,15 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
             String rangeLessThan = PARTITION_TS_FMT.format(partition.getRangeLessThan());
             if (partition.getRangeMinimum() == null) {
                 conditions.append(String.format(
-                        "  WHEN (NEW.%1$s < '%2$s'::timestamp without time zone) THEN\n" +
+                        "  WHEN (NEW.%1$s < '%2$s') THEN\n" +
                         "    INSERT INTO %3$s VALUES (NEW.*);\n",
                         this.columnName, rangeLessThan, partition.getPartitionName()));
             }
             else {
                 String rangeMinimum = PARTITION_TS_FMT.format(partition.getRangeMinimum());
                 conditions.append(String.format(
-                        "  WHEN (NEW.%1$s < '%2$s'::timestamp without time zone AND\n" +
-                        "        NEW.%1$s >= '%3$s'::timestamp without time zone) THEN\n" +
+                        "  WHEN (NEW.%1$s < '%2$s' AND\n" +
+                        "        NEW.%1$s >= '%3$s') THEN\n" +
                         "    INSERT INTO %4$s VALUES (NEW.*);\n",
                         this.columnName, rangeLessThan, rangeMinimum, partition.getPartitionName()));
             }

@@ -3,10 +3,10 @@
  */
 package org.zenoss.utils.dao.impl;
 
+import org.zenoss.utils.dao.Partition;
+
 import java.sql.Timestamp;
 import java.util.Map;
-
-import org.zenoss.utils.dao.Partition;
 
 /**
  * Represents the configuration of a MySQL table partition (loaded from the

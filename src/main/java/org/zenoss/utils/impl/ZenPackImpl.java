@@ -5,7 +5,6 @@ package org.zenoss.utils.impl;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
-import com.google.common.io.Files;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zenoss.utils.ZenPack;
@@ -13,20 +12,14 @@ import org.zenoss.utils.ZenPack;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileFilter;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.FilenameFilter;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class ZenPackImpl implements ZenPack {
 

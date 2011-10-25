@@ -7,7 +7,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.SimpleJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
+import org.zenoss.utils.dao.Partition;
+import org.zenoss.utils.dao.RangePartitioner;
 
+import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -15,10 +18,6 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
-import javax.sql.DataSource;
-
-import org.zenoss.utils.dao.Partition;
-import org.zenoss.utils.dao.RangePartitioner;
 
 /**
  * Class used to simplify creation of range partitions on integer columns.
