@@ -145,8 +145,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         allPartitions.addAll(partitions);
         for (Timestamp rangeLessThan : partitionTimestamps) {
             final String partitionName = namePartition(rangeLessThan);
-            allPartitions.add(new PostgreSqlPartition(this.tableName,
-                    this.columnName, partitionName, rangeLessThan,
+            allPartitions.add(new PostgreSqlPartition(partitionName, rangeLessThan,
                     rangeMinimum));
             logger.info("adding partition {} to table {}", partitionName, this.tableName);
             createPartition(partitionName, rangeLessThan, rangeMinimum, formats, triggers);
@@ -404,8 +403,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
                 this.tableName);
         final List<Partition> partitions = new ArrayList<Partition>();
         for (Map<String, Object> map : fields) {
-            partitions.add(PostgreSqlPartition.fromPostgreSqlResultSetFields(
-                    this.tableName, this.columnName, map));
+            partitions.add(PostgreSqlPartition.fromPostgreSqlResultSetFields(map));
         }
         return partitions;
     }

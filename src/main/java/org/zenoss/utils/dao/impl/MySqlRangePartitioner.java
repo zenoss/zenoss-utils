@@ -140,7 +140,8 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
     @Transactional(readOnly = true)
     public List<Partition> listPartitions() {
         final List<Map<String, Object>> fields = this.template.queryForList(
-                  " SELECT * FROM information_schema.partitions "
+                  " SELECT PARTITION_NAME,PARTITION_METHOD,PARTITION_DESCRIPTION "
+                + " FROM information_schema.partitions "
                 + " WHERE TABLE_SCHEMA=? "
                 + " AND TABLE_NAME=? "
                 + " AND PARTITION_METHOD = 'RANGE' "

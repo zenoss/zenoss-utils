@@ -24,6 +24,7 @@ import java.util.TreeMap;
 public class ZenPackImpl implements ZenPack {
 
     private static final Logger logger = LoggerFactory.getLogger(ZenPackImpl.class);
+    private static final Splitter DOT_SPLITTER = Splitter.on('.');
 
     private String _name;
     private String _rootPath;
@@ -62,7 +63,7 @@ public class ZenPackImpl implements ZenPack {
         List<String> parts = new ArrayList<String>();
         parts.add(_rootPath);
         if (_name != null) {
-            for (String s : Splitter.on(".").split(_name)) {
+            for (String s : DOT_SPLITTER.split(_name)) {
                 parts.add(s);
             }
         }
@@ -109,7 +110,7 @@ public class ZenPackImpl implements ZenPack {
         BufferedReader br = null;
         try {
             br = new BufferedReader(new FileReader(file));
-            String line = null;
+            String line;
             while ((line = br.readLine()) != null) {
                 int colonIdx = line.indexOf(':');
                 if (colonIdx > 0) {

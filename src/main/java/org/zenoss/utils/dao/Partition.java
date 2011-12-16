@@ -10,9 +10,6 @@ import java.sql.Timestamp;
  * necessary for creating external indexes.
  */
 public interface Partition {
-
-    public String getTableName();
-    public String getPartitionColumn();
     public String getPartitionName();
     public Timestamp getRangeLessThan();
     public Timestamp getRangeMinimum();

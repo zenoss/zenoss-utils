@@ -19,8 +19,6 @@ import java.util.regex.Pattern;
  */
 public class PostgreSqlPartition implements Partition {
 
-    private String tableName;
-    private String columnName;
     private String partitionName;
     private Timestamp rangeLessThan;
     private Timestamp rangeMinimum;
@@ -28,26 +26,12 @@ public class PostgreSqlPartition implements Partition {
     /* package */ PostgreSqlPartition() {
     }
 
-    /* package */ PostgreSqlPartition(String tableName,
-            String columnName,
-            String partitionName,
+    /* package */ PostgreSqlPartition(String partitionName,
             Timestamp rangeLessThan,
             Timestamp rangeMinimum) {
-        this.tableName = tableName;
-        this.columnName = columnName;
         this.partitionName = partitionName;
         this.rangeLessThan = rangeLessThan;
         this.rangeMinimum = rangeMinimum;
-    }
-
-    @Override
-    public String getTableName() {
-        return tableName;
-    }
-
-    @Override
-    public String getPartitionColumn() {
-        return columnName;
     }
 
     @Override
@@ -68,9 +52,7 @@ public class PostgreSqlPartition implements Partition {
     @Override
     public String toString() {
         return String.format(
-                  "PostgreSqlPartition [tableName=%s, columnName=%s, "
-                + "partitionName=%s, rangeLessThan=%s, rangeMinimum=%s]",
-                tableName, columnName,
+                  "PostgreSqlPartition [partitionName=%s, rangeLessThan=%s, rangeMinimum=%s]",
                 partitionName, rangeLessThan, rangeMinimum);
     }
 
@@ -98,11 +80,8 @@ public class PostgreSqlPartition implements Partition {
         return new Timestamp(calendar.getTimeInMillis());
     }
 
-    public static PostgreSqlPartition fromPostgreSqlResultSetFields(
-            String tableName, String columnName, Map<String, Object> fields) {
+    public static PostgreSqlPartition fromPostgreSqlResultSetFields(Map<String, Object> fields) {
         PostgreSqlPartition partition = new PostgreSqlPartition();
-        partition.tableName = tableName;
-        partition.columnName = columnName;
         for (Map.Entry<String, Object> entry : fields.entrySet()) {
             final String field = entry.getKey();
             final Object val = entry.getValue();
