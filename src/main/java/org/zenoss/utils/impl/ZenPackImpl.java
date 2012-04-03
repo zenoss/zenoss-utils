@@ -90,14 +90,20 @@ public class ZenPackImpl implements ZenPack {
                 }
             }
         }
-        logger.debug("Found egg-info for ZenPack {}: {}", this._rootPath, eggInfo);
-        this._name = eggInfo.get("name");
-        if (this._name == null) {
-            logger.warn("Failed to find ZenPack name in: {}", this._rootPath);
+
+        if (!eggInfo.isEmpty()) {
+            logger.debug("Found egg-info for ZenPack {}: {}", this._rootPath, eggInfo);
+            this._name = eggInfo.get("name");
+            if (this._name == null) {
+                logger.warn("Failed to find ZenPack name in: {}", this._rootPath);
+            }
+            this._version = eggInfo.get("version");
+            if (this._version == null) {
+                logger.warn("Failed to find ZenPack version in: {}", this._rootPath);
+            }
         }
-        this._version = eggInfo.get("version");
-        if (this._version == null) {
-            logger.warn("Failed to find ZenPack version in: {}", this._rootPath);
+        else {
+            logger.warn("No egg-info found for ZenPack in {}.", this._rootPath);
         }
     }
 
