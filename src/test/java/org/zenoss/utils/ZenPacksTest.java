@@ -10,7 +10,6 @@
 
 package org.zenoss.utils;
 
-import com.google.common.io.Resources;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,8 +24,8 @@ import static org.junit.Assert.*;
  */
 public class ZenPacksTest {
 
-    private static String fakeZenHome = Resources.getResource(".").getPath();
-    private static String ZENPACK = "ZenPacks.zenoss.TestZenPack";
+    private static final String fakeZenHome = ZenPacksTest.class.getResource("/").getPath();
+    private static final String ZENPACK = "ZenPacks.zenoss.TestZenPack";
 
     @Before
     public void setUp() {
