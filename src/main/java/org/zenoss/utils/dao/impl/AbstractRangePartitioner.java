@@ -45,7 +45,6 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
     }
 
     protected final SimpleJdbcTemplate template;
-    protected final String databaseName;
     protected final String tableName;
     protected final String columnName;
     protected final int durationInMillis;
@@ -53,11 +52,9 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
     /**
      * Creates a range partitioner helper class which creates partitions of the
      * specified range on the table.
-     * 
+     *
      * @param ds
      *            DataSource to create template
-     * @param databaseName
-     *            Database name.
      * @param tableName
      *            Table name.
      * @param columnName
@@ -67,17 +64,15 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
      * @param unit
      *            Unit of duration.
      */
-    public AbstractRangePartitioner(DataSource ds, String databaseName,
+    public AbstractRangePartitioner(DataSource ds,
             String tableName, String columnName, long duration, TimeUnit unit) {
-        if (ds == null || databaseName == null || tableName == null
-                || unit == null) {
+        if (ds == null || tableName == null || unit == null) {
             throw new NullPointerException();
         }
         if (duration <= 0) {
             throw new IllegalArgumentException("Duration <= 0");
         }
         this.template = new SimpleJdbcTemplate(ds);
-        this.databaseName = databaseName;
         this.tableName = tableName;
         this.columnName = columnName;
         long millis = unit.toMillis(duration);

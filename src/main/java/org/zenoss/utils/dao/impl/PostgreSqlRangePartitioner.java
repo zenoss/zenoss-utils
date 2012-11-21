@@ -54,9 +54,9 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
     private final String triggerName;
     private final String triggerFunction;
 
-    public PostgreSqlRangePartitioner(DataSource ds, String databaseName,
+    public PostgreSqlRangePartitioner(DataSource ds,
             String tableName, String columnName, long duration, TimeUnit unit) {
-        super(ds, databaseName, tableName, columnName, duration, unit);
+        super(ds, tableName, columnName, duration, unit);
         this.triggerName = "ins_" + this.tableName + "_trg";
         this.triggerFunction = this.tableName + "_ins_trg_fn";
     }

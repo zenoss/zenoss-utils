@@ -31,9 +31,9 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
     private static final Logger logger = LoggerFactory
             .getLogger(MySqlRangePartitioner.class);
 
-    public MySqlRangePartitioner(DataSource ds, String databaseName,
+    public MySqlRangePartitioner(DataSource ds,
             String tableName, String columnName, long duration, TimeUnit unit) {
-        super(ds, databaseName, tableName, columnName, duration, unit);
+        super(ds, tableName, columnName, duration, unit);
     }
 
     protected void createPartitions(List<Partition> currentPartitions,
@@ -149,13 +149,13 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
         final List<Map<String, Object>> fields = this.template.queryForList(
                   " SELECT PARTITION_NAME,PARTITION_METHOD,PARTITION_DESCRIPTION "
                 + " FROM information_schema.partitions "
-                + " WHERE TABLE_SCHEMA=? "
+                + " WHERE TABLE_SCHEMA=DATABASE() "
                 + " AND TABLE_NAME=? "
                 + " AND PARTITION_METHOD = 'RANGE' "
                 + " AND (PARTITION_NAME IS NOT NULL "
                 + "      OR SUBPARTITION_NAME IS NOT NULL) "
                 + " ORDER BY PARTITION_DESCRIPTION",
-                this.databaseName, this.tableName);
+                this.tableName);
         final List<Partition> partitions =
                 new ArrayList<Partition>(fields.size());
         if (fields.isEmpty()) {
