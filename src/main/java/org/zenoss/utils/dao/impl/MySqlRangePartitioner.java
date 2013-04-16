@@ -174,7 +174,7 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
         return partitions;
     }
 
-    private String namePartition(Timestamp partitionTimestamp) {
+    protected String namePartition(Timestamp partitionTimestamp) {
         return "p" + DATE_FORMAT.format(partitionTimestamp);
     }
 }
