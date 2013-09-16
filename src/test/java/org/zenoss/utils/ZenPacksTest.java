@@ -1,10 +1,10 @@
 /*****************************************************************************
- * 
+ *
  * Copyright (C) Zenoss, Inc. 2011, all rights reserved.
- * 
+ *
  * This content is made available according to terms specified in
  * License.zenoss under the directory where your Zenoss product is installed.
- * 
+ *
  ****************************************************************************/
 
 
@@ -14,6 +14,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,11 +26,13 @@ import static org.junit.Assert.*;
  */
 public class ZenPacksTest {
 
-    private static final String fakeZenHome = ZenPacksTest.class.getResource("/").getPath();
+
     private static final String ZENPACK = "ZenPacks.zenoss.TestZenPack";
+    private String fakeZenHome;
 
     @Before
-    public void setUp() {
+    public void setUp() throws UnsupportedEncodingException {
+        fakeZenHome = URLDecoder.decode(ZenPacksTest.class.getResource("/").getPath(), "UTF-8");
         System.setProperty("ZENHOME", fakeZenHome);
     }
 
