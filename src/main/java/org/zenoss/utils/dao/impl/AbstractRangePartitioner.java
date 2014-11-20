@@ -20,10 +20,7 @@ import org.zenoss.utils.dao.RangePartitioner;
 import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.List;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -48,6 +45,7 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
     protected final String tableName;
     protected final String columnName;
     protected final int durationInMillis;
+    private volatile List<Partition> partitionCache = null;
 
     /**
      * Creates a range partitioner helper class which creates partitions of the
@@ -95,7 +93,8 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int createPartitions(int pastPartitions, int futurePartitions) {
+    public final synchronized int createPartitions(int pastPartitions, int futurePartitions) {
+        this.partitionCache = null;
         final List<Partition> currentPartitions = listPartitions();
         Timestamp lastPartitionTimestamp = new Timestamp(0L);
         if (!currentPartitions.isEmpty()) {
@@ -106,6 +105,7 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
                 calculatePartitionTimestamps(pastPartitions,
                         futurePartitions, lastPartitionTimestamp);
         createPartitions(currentPartitions, partitionTimestamps);
+        this.partitionCache = null;
         return partitionTimestamps.size();
     }
 
@@ -153,4 +153,47 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
         }
         return timestamps;
     }
+
+    /**
+     * Returns a list of all partitions found on the table. If there are no
+     * partitions defined, this returns an empty list. All partitions are
+     * returned in sorted order with the first partition having the lowest range
+     * value.
+     *
+     * @return A list of all partitions found on the table.
+     */
+    @Override
+    public final List<Partition> listPartitions() {
+        List<Partition> result = partitionCache;
+        if (result == null) {
+            synchronized (this) {
+                result = partitionCache;
+                if (result == null) {
+                    result = partitionCache = _listPartitions();
+                }
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public final synchronized void removeAllPartitions() {
+        _removeAllPartitions();
+        this.partitionCache = null;
+    }
+
+    @Override
+    public final synchronized int pruneAndCreatePartitions(int duration,
+                                                       TimeUnit unit,
+                                                       int pastPartitions,
+                                                       int futurePartitions) {
+        this.partitionCache = null;
+        int result = _pruneAndCreatePartitions(duration, unit, pastPartitions, futurePartitions);
+        this.partitionCache = null;
+        return result;
+    }
+
+    protected abstract int _pruneAndCreatePartitions(int duration, TimeUnit unit, int pastPartitions, int futurePartitions);
+    protected abstract void _removeAllPartitions();
+    protected abstract List<Partition> _listPartitions();
 }
