@@ -95,7 +95,7 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
     @Transactional(rollbackFor = Exception.class)
     public final synchronized int createPartitions(int pastPartitions, int futurePartitions) {
         this.partitionCache = null;
-        final List<Partition> currentPartitions = listPartitions();
+        final List<Partition> currentPartitions = _listPartitions();
         Timestamp lastPartitionTimestamp = new Timestamp(0L);
         if (!currentPartitions.isEmpty()) {
             lastPartitionTimestamp = currentPartitions
@@ -105,7 +105,6 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
                 calculatePartitionTimestamps(pastPartitions,
                         futurePartitions, lastPartitionTimestamp);
         createPartitions(currentPartitions, partitionTimestamps);
-        this.partitionCache = null;
         return partitionTimestamps.size();
     }
 
@@ -178,8 +177,8 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
 
     @Override
     public final synchronized void removeAllPartitions() {
-        _removeAllPartitions();
         this.partitionCache = null;
+        _removeAllPartitions();
     }
 
     @Override
@@ -188,9 +187,7 @@ public abstract class AbstractRangePartitioner implements RangePartitioner {
                                                        int pastPartitions,
                                                        int futurePartitions) {
         this.partitionCache = null;
-        int result = _pruneAndCreatePartitions(duration, unit, pastPartitions, futurePartitions);
-        this.partitionCache = null;
-        return result;
+        return _pruneAndCreatePartitions(duration, unit, pastPartitions, futurePartitions);
     }
 
     protected abstract int _pruneAndCreatePartitions(int duration, TimeUnit unit, int pastPartitions, int futurePartitions);
