@@ -70,23 +70,8 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
         }
     }
 
-    /**
-     * Prunes all partitions which are older than the specified amount of time
-     * and then creates the specified number of past and future partitions for
-     * the table.
-     *
-     * @param duration
-     *            The duration of time.
-     * @param unit
-     *            The unit of time.
-     * @param pastPartitions
-     *            The number of past partitions to create in the table.
-     * @param futurePartitions
-     *            The number of future partitions to create in the table.
-     * @return The number of created partitions.
-     */
     @Override
-    public int pruneAndCreatePartitions(int duration,
+    protected int _pruneAndCreatePartitions(int duration,
             TimeUnit unit,
             int pastPartitions,
             int futurePartitions) {
@@ -130,22 +115,14 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
     }
 
     @Override
-    public void removeAllPartitions() {
+    protected void _removeAllPartitions() {
         this.template.update(String.format("ALTER TABLE %s REMOVE PARTITIONING",
                 this.tableName));
     }
 
-    /**
-     * Returns a list of all partitions found on the table. If there are no
-     * partitions defined, this returns an empty list. All partitions are
-     * returned in sorted order with the first partition having the lowest range
-     * value.
-     * 
-     * @return A list of all partitions found on the table.
-     */
     @Override
     @Transactional(readOnly = true)
-    public List<Partition> listPartitions() {
+    protected List<Partition> _listPartitions() {
         final List<Map<String, Object>> fields = this.template.queryForList(
                   " SELECT PARTITION_NAME,PARTITION_METHOD,PARTITION_DESCRIPTION "
                 + " FROM information_schema.partitions "
@@ -161,11 +138,11 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
         if (fields.isEmpty()) {
             return partitions;
         }
-        Partition previousPartition = 
+        Partition previousPartition =
                 MySqlPartition.fromMySqlResultSetFields(fields.get(0));
         partitions.add(previousPartition);
         for (Map<String, Object> map : fields.subList(1, fields.size())) {
-            MySqlPartition partition = 
+            MySqlPartition partition =
                     MySqlPartition.fromMySqlResultSetFields(map);
             partition.setRangeMinimum(previousPartition.getRangeLessThan());
             partitions.add(partition);
