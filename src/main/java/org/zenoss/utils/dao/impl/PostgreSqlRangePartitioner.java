@@ -78,7 +78,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         if (duration < 0) {
             throw new IllegalArgumentException("Duration must be >= 0");
         }
-        List<Partition> currentPartitions = listPartitions();
+        List<Partition> currentPartitions = _listPartitions();
         List<Partition> partitionsToPrune = new ArrayList<Partition>();
         List<Partition> partitionsToKeep = new ArrayList<Partition>();
         final long millis = unit.toMillis(duration);
@@ -239,7 +239,7 @@ public class PostgreSqlRangePartitioner extends AbstractRangePartitioner {
         this.template.update(" DROP TRIGGER " + this.triggerName
                 + " ON " + this.tableName);
         this.template.update(" DROP FUNCTION " + this.triggerFunction + "()");
-        List<Partition> partitions = listPartitions();
+        List<Partition> partitions = _listPartitions();
         for (Partition partition : partitions) {
             this.template.update("ALTER TABLE " + partition.getPartitionName()
                     + " NO INHERIT " + this.tableName);

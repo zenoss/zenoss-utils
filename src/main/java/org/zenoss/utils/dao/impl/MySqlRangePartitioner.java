@@ -75,7 +75,7 @@ public class MySqlRangePartitioner extends AbstractRangePartitioner {
             TimeUnit unit,
             int pastPartitions,
             int futurePartitions) {
-        List<Partition> partitions = listPartitions();
+        List<Partition> partitions = _listPartitions();
         Timestamp rangeMinimum = partitions.isEmpty() ? new Timestamp(0L)
                 : partitions.get(partitions.size()-1).getRangeLessThan();
         dropPartitionsOlderThan(duration, unit, partitions);
