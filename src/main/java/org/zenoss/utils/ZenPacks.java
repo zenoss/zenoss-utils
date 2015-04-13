@@ -30,54 +30,86 @@ import java.util.Set;
  */
 public final class ZenPacks {
 
+    private static Collection<String> zenpackDirectories = null;
+
+    // Statically define the set of directories where easy-install.pth files can be as
+    // $ZENHOME/ZenPacks and /var/zenoss/ZenPacks.
+    static {
+        zenpackDirectories = new HashSet<String>();
+        try {
+            zenpackDirectories.add(Zenoss.zenPath("ZenPacks"));
+        } catch(Exception e) {
+            // Assume the exception was due to $ZENHOME being undefined and assume ZENHOME is /opt/zenoss.
+            zenpackDirectories.add("/opt/zenoss/ZenPacks");
+        }
+        zenpackDirectories.add("/var/zenoss/ZenPacks");
+    }
+
     private ZenPacks() {
     }
 
     /**
-     * Parse $ZENHOME/ZenPacks/easy-install.pth to find the paths of all ZenPacks that are
-     * installed.
+     * Returns a collection of directory paths parsed from the given Python .pth file.
+     */
+    private static Collection<String> parsePthFile(File pthFile) throws ZenossException {
+        List<String> paths;
+        try {
+            paths = Files.readLines(pthFile, Charset.defaultCharset());
+        } catch (IOException e) {
+            throw new ZenossException("Unable to parse ZenPack path file.", e);
+        }
+        // Make all the paths absolute
+        Collection<String> absolutepaths = Collections2.transform(paths, new Function<String, String>() {
+            @Override
+            public String apply(String s) {
+                s = s.trim();
+                if (s.length() == 0) {
+                    // Blank line
+                    return null;
+                }
+                if (!s.startsWith("/")) {
+                    // Path relative to easy-install.pth; make it absolute
+                    try {
+                        s = new File(Zenoss.zenPath("ZenPacks", s)).getCanonicalPath();
+                    } catch (ZenossException ignored) {
+                    } catch (IOException ignored) {
+                    }
+                }
+                return s;
+            }
+        });
+        return Collections2.filter(absolutepaths, new com.google.common.base.Predicate<String>() {
+            public boolean apply(String input) {
+                return input != null && new File(input).isDirectory();
+            }
+        });
+    }
+
+    /**
+     * Returns a collection of ZenPack paths parsed from easy-install.pth files.
+     *
+     * By default, $ZENHOME/ZenPacks/easy-install.pth and /var/zenoss/ZenPacks/easy-install.pth are the pth files
+     * that parsed.
      *
      * @return Paths to ZenPack roots, guaranteed to exist.
      * @throws ZenossException If ZENHOME does not exist or the path file can't be parsed.
      */
     private static Collection<String> getZenPackPaths() throws ZenossException {
-        File zpPathFile = new File(Zenoss.zenPath("ZenPacks", "easy-install.pth"));
-        if (zpPathFile.isFile()) {
-            List<String> paths;
-            try {
-                paths = Files.readLines(zpPathFile, Charset.defaultCharset());
-            } catch (IOException e) {
-                throw new ZenossException("Unable to parse ZenPack path file.", e);
+        Collection<String> zenpackPaths = new HashSet<String>();
+        for (String zenpackDirectory : zenpackDirectories) {
+            File pathFile = new File(zenpackDirectory + "/easy-install.pth");
+            if (pathFile.isFile()) {
+                zenpackPaths.addAll(parsePthFile(pathFile));
             }
-            // Make all the paths absolute
-            Collection<String> absolutepaths = Collections2.transform(paths, new Function<String, String>() {
-                @Override
-                public String apply(String s) {
-                    s = s.trim();
-                    if (s.length() == 0) {
-                        // Blank line
-                        return null;
-                    }
-                    if (!s.startsWith("/")) {
-                        // Path relative to easy-install.pth; make it absolute
-                        try {
-                            s = new File(Zenoss.zenPath("ZenPacks", s)).getCanonicalPath();
-                        } catch (ZenossException ignored) {
-                        } catch (IOException ignored) {
-                        }
-                    }
-                    return s;
-                }
-            });
-            return Collections2.filter(absolutepaths, new com.google.common.base.Predicate<String>() {
-                public boolean apply(String input) {
-                    return input != null && new File(input).isDirectory();
-                }
-            });
-        } else {
-            // easy-install.pth doesn't exist. This probably means no ZenPacks are installed yet.
-            return Collections.emptyList();
         }
+        return zenpackPaths;
+    }
+
+    /**
+     * Set the collection of directories where easy-install.pth files can be found.
+     */
+    public static void setZenPackDirectories(Collection<String> directories) {
+        zenpackDirectories = directories;
     }
 
     /**
