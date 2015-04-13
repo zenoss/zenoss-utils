@@ -34,6 +34,12 @@ public class ZenPacksTest {
     public void setUp() throws UnsupportedEncodingException {
         fakeZenHome = URLDecoder.decode(ZenPacksTest.class.getResource("/").getPath(), "UTF-8");
         System.setProperty("ZENHOME", fakeZenHome);
+        List<String> directories = new ArrayList<String>();
+        try {
+            directories.add(Zenoss.zenPath("ZenPacks"));
+        } catch (Exception e) {
+        }
+        ZenPacks.setZenPackDirectories(directories);
     }
 
     @After
