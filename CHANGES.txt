@@ -1,8 +1,10 @@
 CHANGES
 -------
 
-v2.0.2
- * AbstractRangePartitioner (and sub-classes) cache partition list in memory.
+v2.1.0
+ * allow alternative dirs for zenpacks, ZEN-17380 .
 v2.0.3
  * Fixed bug in which cache was not cleared for MySQL pruneAndCreatePartitions
    and Postgres pruneAndCreatePartitions and removeAllPartitions.
+v2.0.2
+ * AbstractRangePartitioner (and sub-classes) cache partition list in memory.
